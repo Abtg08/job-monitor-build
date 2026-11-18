@@ -1,0 +1,52 @@
+name: Job Monitor
+
+on:
+  schedule:
+    # Run every 3 hours during Indian business hours (IST 7am-11pm = UTC 1:30-17:30)
+    - cron: '30 1,4,7,10,13,16 * * *'
+  workflow_dispatch: # Manual trigger button
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Restore seen-jobs cache
+        uses: actions/cache@v4
+        with:
+          path: seen_jobs.json
+          key: seen-jobs-${{ github.run_id }}
+          restore-keys: seen-jobs-
+
+      - name: Run job monitor
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+        run: python monitor.py
+
+      - name: Save seen-jobs cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: seen_jobs.json
+          key: seen-jobs-${{ github.run_id }}
+
+      - name: Upload job results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: job-results-${{ github.run_number }}
+          path: |
+            latest_jobs.json
+            seen_jobs.json
+          retention-days: 7
